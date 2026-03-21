@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>受診サポート日記</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'warm-cream': '#F0F8FF',
+                        'warm-orange': '#60A5FA',
+                        'soft-green': '#4F46E5',
+                        'light-blue': '#7C3AED',
+                        'warm-brown': '#4B5563',
+                        'text-dark': '#2C3E50',
+                    },
+                    fontFamily: {
+                        serif: ['Georgia', 'serif'],
+                        sans: ['"Hiragino Sans"', 'HiraginoSans', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            font-family: "Hiragino Sans", HiraginoSans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #F0F8FF 0%, #E8F4F8 100%);
+            color: #2C3E50;
+        }
+
+        .mode-indicator {
+            position: fixed;
+            top: 0;
+            right: 0;
+            padding: 8px 16px;
+            border-radius: 0 0 0 12px;
+            font-weight: bold;
+            font-size: 14px;
+            z-index: 50;
+        }
+
+        .mode-indicator.user-mode {
+            background-color: #60A5FA;
+            color: white;
+        }
+
+        .mode-indicator.staff-mode {
+            background-color: #EC4899;
+            color: white;
+        }
+
+        .login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(96, 165, 250, 0.95) 0%, rgba(139, 92, 246, 0.95) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .login-overlay.hidden {
+            display: none;
+        }
+
+        .login-card {
+            background: white;
+            border-radius: 24px;
+            padding: 40px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        .login-card h2 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            color: #2C3E50;
+        }
+
+        .login-card p {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .login-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .login-btn {
+            padding: 16px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .login-btn-user {
+            background: linear-gradient(135deg, #60A5FA 0%, #3B82F6 100%);
+            color: white;
+        }
+
+        .login-btn-user:hover {
+            box-shadow: 0 8px 24px rgba(96, 165, 250, 0.4);
+        }
+
+        .login-btn-staff {
+            background: #E5E7EB;
+            color: #2C3E50;
+        }
+
+        .login-btn-staff:hover {
+            background: #D1D5DB;
+        }
+
+        .passcode-input {
+            font-size: 24px !important;
+            padding: 16px !important;
+            text-align: center;
+            letter-spacing: 8px;
+            border: 2px solid #3B82F6 !important;
+            margin-bottom: 16px !important;
+            border-radius: 12px;
+        }
+
+        .staff-action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .staff-action-btn {
+            padding: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .staff-action-btn-export {
+            background: #10B981;
+            color: white;
+        }
+
+        .staff-action-btn-export:hover {
+            background: #059669;
+        }
+
+        .staff-action-btn-logout {
+            background: #EF4444;
+            color: white;
+        }
+
+        .staff-action-btn-logout:hover {
+            background: #DC2626;
+        }
+
+        .staff-view-badge {
+            display: inline-block;
+            background: #EC4899;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+
+        .staff-screen {
+            display: none;
+        }
+
+        .staff-screen.active {
+            display: block;
+        }
+        
+        .tab-button {
+            transition: all 0.3s ease;
+        }
+        
+        .tab-button.active {
+            background-color: #60A5FA;
+            color: white;
+            box-shadow: 0 -4px 12px rgba(96, 165, 250, 0.3);
+        }
+        
+        .tab-button:not(.active) {
+            background-color: #E8DCC8;
+            color: #2C3E50;
+        }
+        
+        .symptom-toggle {
+            transition: all 0.2s ease;
+            border: 3px solid #D4C4B0;
+        }
+        
+        .symptom-toggle.selected {
+            background-color: #A8D5BA;
+            border-color: #A8D5BA;
+            color: white;
+            box-shadow: 0 4px 8px rgba(168, 213, 186, 0.3);
+        }
+        
+        .symptom-toggle:not(.selected) {
+            background-color: #F9F5F0;
+            color: #4A4A4A;
+        }
+        
+        .record-card {
+            background: white;
+            border-left: 5px solid #FFB088;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transition: all 0.2s ease;
+        }
+        
+        .record-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #FFB088 0%, #FF9B6F 100%);
+            color: white;
+            font-weight: bold;
+            border: none;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(255, 176, 136, 0.2);
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            box-shadow: 0 6px 16px rgba(255, 176, 136, 0.4);
+            transform: translateY(-2px);
+        }
+        
+        .btn-primary:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        
+        .btn-secondary {
+            background-color: #A8D5BA;
+            color: white;
+            font-weight: bold;
+            border: none;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(168, 213, 186, 0.2);
+        }
+        
+        .btn-secondary:hover {
+            box-shadow: 0 6px 16px rgba(168, 213, 186, 0.4);
+            transform: translateY(-2px);
+        }
+        
+        .btn-danger {
+            background-color: #E8836E;
+            color: white;
+            font-weight: bold;
+            border: none;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-danger:hover {
+            background-color: #D46C54;
+        }
+        
+        .warning-box {
+            background-color: #FFE8D6;
+            border-left: 5px solid #FF7D5C;
+            color: #8B4513;
+        }
+        
+        input[type="date"],
+        textarea,
+        input[type="file"] {
+            font-size: 18px !important;
+            padding: 14px !important;
+            border-radius: 8px;
+            border: 2px solid #D4C4B0 !important;
+            font-family: inherit;
+        }
+        
+        input[type="date"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #FFB088 !important;
+            box-shadow: 0 0 0 3px rgba(255, 176, 136, 0.1);
+        }
+        
+        .screen-container {
+            min-height: calc(100vh - 100px);
+            padding-bottom: 20px;
+        }
+        
+        .medicine-preview {
+            border: 3px dashed #FFB088;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 16px;
+            background-color: rgba(255, 248, 240, 0.8);
+        }
+        
+        .medicine-preview img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        @media (max-width: 640px) {
+            .screen-container {
+                min-height: calc(100vh - 110px);
+            }
+        }
+    </style>
+</head>
+<body class="bg-warm-cream">
+    <!-- モード表示 -->
+    <div id="modeIndicator" class="mode-indicator user-mode">👤 利用者モード</div>
+
+    <!-- ログイン画面 -->
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-card">
+            <h2>こころと からだの ノート</h2>
+            <p>どちらの方ですか？</p>
+            <div class="login-buttons">
+                <button id="btnUserMode" class="login-btn login-btn-user">
+                    👤 利用者です
+                </button>
+                <button id="btnStaffLogin" class="login-btn login-btn-staff">
+                    👨‍⚕️ スタッフです
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- スタッフパスコード入力画面 -->
+    <div id="staffLoginOverlay" class="login-overlay hidden">
+        <div class="login-card">
+            <h2>スタッフログイン</h2>
+            <p>パスコードを入力してください</p>
+            <input type="password" id="staffPasscode" class="passcode-input" placeholder="****" maxlength="4">
+            <div class="login-buttons">
+                <button id="btnStaffSubmit" class="login-btn login-btn-user">
+                    ログイン
+                </button>
+                <button id="btnStaffCancel" class="login-btn login-btn-staff">
+                    戻る
+                </button>
+            </div>
+            <p id="staffLoginError" style="color: #EF4444; margin-top: 16px; font-weight: bold; display: none;">
+                ❌ パスコードが間違っています
+            </p>
+        </div>
+    </div>
+    <div class="min-h-screen flex flex-col">
+        <!-- ヘッダー -->
+        <header class="bg-gradient-to-r from-blue-400 to-indigo-500 shadow-lg py-6 px-4">
+            <h1 class="text-4xl md:text-5xl font-bold text-center text-white drop-shadow-lg">
+                こころと からだの ノート
+            </h1>
+            <p class="text-center text-white text-lg mt-2 drop-shadow">
+                お家の人が毎日の様子を記録して、先生に伝えましょう
+            </p>
+        </header>
+
+        <!-- メインコンテンツ -->
+        <main class="flex-1 overflow-y-auto pb-28 px-4 md:px-6">
+            <div class="max-w-2xl mx-auto">
+
+                <!-- スタッフ用ダッシュボード -->
+                <div id="screen-staff" class="screen-container staff-screen">
+                    <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 mt-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-3xl font-bold text-text-dark">スタッフ管理画面</h2>
+                            <span class="staff-view-badge">スタッフ</span>
+                        </div>
+
+                        <!-- スタッフ操作ボタン -->
+                        <div class="staff-action-buttons">
+                            <button id="btnStaffExport" class="staff-action-btn staff-action-btn-export">
+                                📥 CSVエクスポート
+                            </button>
+                            <button id="btnStaffLogout" class="staff-action-btn staff-action-btn-logout">
+                                🚪 ログアウト
+                            </button>
+                        </div>
+
+                        <hr class="my-6">
+
+                        <!-- 記録一覧 -->
+                        <h3 class="text-2xl font-bold text-text-dark mb-4">全記録一覧</h3>
+                        <div id="staffRecordList" class="space-y-4">
+                            <p class="text-xl text-gray-500 text-center py-8">記録がありません</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 記録する画面 -->
+                <div id="screen-record" class="screen-container hidden">
+                    <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 mt-6">
+                        <h2 class="text-3xl font-bold text-text-dark mb-2">本日の様子を記録</h2>
+                        <p class="text-lg text-gray-600 mb-6">保護者の方が、お子さんの今日の様子を記録してください</p>
+                        
+                        <!-- 日付選択 -->
+                        <div class="mb-8">
+                            <label class="block text-2xl font-bold text-text-dark mb-3">日付を選ぶ</label>
+                            <input type="date" id="recordDate" class="w-full text-2xl">
+                        </div>
+
+                        <!-- 症状選択 -->
+                        <div class="mb-8">
+                            <label class="block text-2xl font-bold text-text-dark mb-4">今日の様子について（あてはまるものを選んでください）</label>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <!-- 行動・注意関連 -->
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="落ち着きがない・多動">落ち着きがない・多動</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="集中できない">集中できない</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="忘れ物・うっかりミス">忘れ物・うっかりミス</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="衝動的な言動">衝動的な言動</button>
+                                
+                                <!-- 感情・気分関連 -->
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="気分が落ち込んでいる">気分が落ち込んでいる</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="不安・心配が強い">不安・心配が強い</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="イライラ・怒りっぽい">イライラ・怒りっぽい</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="パニック・過呼吸">パニック・過呼吸</button>
+                                
+                                <!-- 感覚・身体関連 -->
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="音や光に敏感">音や光に敏感</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="触覚過敏・嫌がる">触覚過敏・嫌がる</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="頭痛・腹痛">頭痛・腹痛</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="吐き気・気分が悪い">吐き気・気分が悪い</button>
+                                
+                                <!-- 行動パターン関連 -->
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="同じ行動を繰り返す">同じ行動を繰り返す</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="こだわりが強い">こだわりが強い</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="自傷行為・抜毛など">自傷行為・抜毛など</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="攻撃的・暴力的">攻撃的・暴力的</button>
+                                
+                                <!-- 生活・睡眠 -->
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="眠れない・睡眠が悪い">眠れない・睡眠が悪い</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="食事がとれない">食事がとれない</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="薬が飲めない">薬が飲めない</button>
+                                <button class="symptom-toggle p-4 rounded-xl text-xl font-bold transition-all" data-symptom="特に変わったことなし">特に変わったことなし</button>
+                            </div>
+                        </div>
+
+                        <!-- フリーメモ -->
+                        <div class="mb-8">
+                            <label class="block text-2xl font-bold text-text-dark mb-3">その他のことを書く（自由に書いてください）</label>
+                            <textarea id="recordMemo" placeholder="例：学校から帰宅後、イライラしていた｜夜寝るまでに2時間かかった｜学習中に集中できず途中で止めた｜朝から機嫌がよかった" class="w-full h-32 text-xl p-4 rounded-xl border-2 border-gray-300 resize-none focus:border-warm-orange focus:outline-none"></textarea>
+                        </div>
+
+                        <!-- 保存ボタン -->
+                        <button id="btnSaveRecord" class="btn-primary w-full py-5 text-2xl rounded-xl font-bold mb-4">
+                            この内容で保存する
+                        </button>
+                        <div id="recordSaveMessage" class="text-center text-lg font-bold text-soft-green hidden">
+                            ✓ 保存しました！
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 履歴を見る画面 -->
+                <div id="screen-history" class="screen-container hidden">
+                    <div class="mt-6">
+                        <h2 class="text-3xl font-bold text-text-dark mb-6">記録した履歴</h2>
+                        <div id="historyList" class="space-y-4">
+                            <p class="text-xl text-gray-500 text-center py-8">まだ記録がありません</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 医師へ伝える画面 -->
+                <div id="screen-doctor" class="screen-container hidden">
+                    <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 mt-6">
+                        <h2 class="text-3xl font-bold text-text-dark mb-6">先生（医師）へ伝える内容を作る</h2>
+
+                        <!-- 期間選択 -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                            <div>
+                                <label class="block text-2xl font-bold text-text-dark mb-3">開始日</label>
+                                <input type="date" id="periodStart" class="w-full text-2xl">
+                            </div>
+                            <div>
+                                <label class="block text-2xl font-bold text-text-dark mb-3">終了日</label>
+                                <input type="date" id="periodEnd" class="w-full text-2xl">
+                            </div>
+                        </div>
+
+                        <!-- 作成ボタン -->
+                        <button id="btnGenerateText" class="btn-secondary w-full py-5 text-2xl rounded-xl font-bold mb-8">
+                            診察用テキストを作る
+                        </button>
+
+                        <!-- 出力エリア -->
+                        <div id="outputContainer" class="hidden">
+                            <div class="bg-gray-50 rounded-xl p-6 mb-6 border-2 border-soft-green">
+                                <h3 class="text-2xl font-bold text-text-dark mb-4">診察時に伝える内容</h3>
+                                <pre id="outputText" class="text-lg whitespace-pre-wrap break-words font-sans leading-relaxed"></pre>
+                            </div>
+
+                            <!-- テキストコピーボタン -->
+                            <button id="btnCopyText" class="btn-primary w-full py-5 text-2xl rounded-xl font-bold mb-8">
+                                文章をコピーする
+                            </button>
+
+                            <!-- 薬画像アップロード -->
+                            <div class="bg-gradient-to-r from-blue-400 to-blue-500 rounded-xl p-6 mb-6">
+                                <h3 class="text-2xl font-bold text-white mb-4">現在のお薬を記録する</h3>
+                                <label for="medicineFile" class="block">
+                                    <input 
+                                        type="file" 
+                                        id="medicineFile" 
+                                        accept="image/*" 
+                                        capture="environment"
+                                        class="hidden"
+                                    >
+                                    <div class="cursor-pointer bg-white text-center py-5 rounded-xl font-bold text-2xl text-blue-500 hover:bg-gray-50 transition-all">
+                                        📱 撮影して追加 / ライブラリから選ぶ
+                                    </div>
+                                </label>
+                            </div>
+
+                            <!-- 画像プレビューエリア -->
+                            <div id="medicinePreviewContainer" class="hidden">
+                                <div class="warning-box rounded-lg p-4 mb-4">
+                                    <p class="text-xl font-bold">
+                                        ⚠️ この画像は保存されません。<br>
+                                        画面を閉じたり、リロードしたりすると消えます。
+                                    </p>
+                                </div>
+                                <div class="medicine-preview">
+                                    <img id="medicinePreview" alt="お薬の写真">
+                                </div>
+                                <button id="btnClearMedicine" class="btn-danger w-full py-3 text-lg rounded-xl font-bold mt-4">
+                                    画像を削除
+                                </button>
+                            </div>
+
+                            <div id="copyMessage" class="text-center text-lg font-bold text-soft-green hidden mt-4">
+                                ✓ コピーしました！
+                            </div>
+                        </div>
+
+                        <div id="noDataMessage" class="text-center text-xl text-gray-500 py-8">
+                            テキストを作るボタンを押してください
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <!-- タブナビゲーション（下部固定） -->
+        <nav class="fixed bottom-0 left-0 right-0 bg-white border-t-4 border-gray-200 flex justify-around shadow-2xl">
+            <button class="tab-button active flex-1 py-4 text-xl font-bold rounded-t-2xl transition-all" data-tab="record">
+                📝<br>きろくする
+            </button>
+            <button class="tab-button flex-1 py-4 text-xl font-bold rounded-t-2xl transition-all" data-tab="history">
+                📋<br>りれきを みる
+            </button>
+            <button class="tab-button flex-1 py-4 text-xl font-bold rounded-t-2xl transition-all" data-tab="doctor">
+                🏥<br>せんせいへ
+            </button>
+        </nav>
+    </div>
+
+    <script>
+        // ================== 認証管理 ==================
+        const STAFF_PASSCODE = '1234'; // スタッフ用パスコード（事業所で設定）
+        let currentMode = 'user'; // 'user' または 'staff'
+
+        // 初期化：ログイン画面を表示
+        window.addEventListener('load', () => {
+            const mode = localStorage.getItem('appMode');
+            if (mode === 'staff') {
+                // スタッフモードで保存されていた場合
+                currentMode = 'staff';
+                initStaffMode();
+                document.getElementById('loginOverlay').classList.add('hidden');
+            } else {
+                currentMode = 'user';
+                document.getElementById('loginOverlay').classList.remove('hidden');
+            }
+        });
+
+        // ================== ログイン処理 ==================
+        document.getElementById('btnUserMode').addEventListener('click', () => {
+            currentMode = 'user';
+            localStorage.setItem('appMode', 'user');
+            document.getElementById('loginOverlay').classList.add('hidden');
+            document.getElementById('staffLoginOverlay').classList.add('hidden');
+            initUserMode();
+            document.getElementById('modeIndicator').textContent = '👤 利用者モード';
+            document.getElementById('modeIndicator').classList.remove('staff-mode');
+            document.getElementById('modeIndicator').classList.add('user-mode');
+        });
+
+        document.getElementById('btnStaffLogin').addEventListener('click', () => {
+            document.getElementById('loginOverlay').classList.add('hidden');
+            document.getElementById('staffLoginOverlay').classList.remove('hidden');
+            document.getElementById('staffPasscode').value = '';
+            document.getElementById('staffLoginError').style.display = 'none';
+        });
+
+        document.getElementById('btnStaffSubmit').addEventListener('click', () => {
+            const passcode = document.getElementById('staffPasscode').value;
+            if (passcode === STAFF_PASSCODE) {
+                currentMode = 'staff';
+                localStorage.setItem('appMode', 'staff');
+                document.getElementById('staffLoginOverlay').classList.add('hidden');
+                initStaffMode();
+                document.getElementById('modeIndicator').textContent = '👨‍⚕️ スタッフモード';
+                document.getElementById('modeIndicator').classList.remove('user-mode');
+                document.getElementById('modeIndicator').classList.add('staff-mode');
+            } else {
+                document.getElementById('staffLoginError').style.display = 'block';
+            }
+        });
+
+        document.getElementById('btnStaffCancel').addEventListener('click', () => {
+            document.getElementById('staffLoginOverlay').classList.add('hidden');
+            document.getElementById('loginOverlay').classList.remove('hidden');
+            document.getElementById('staffPasscode').value = '';
+        });
+
+        // スタッフパスコード入力時にEnterキー対応
+        document.getElementById('staffPasscode').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('btnStaffSubmit').click();
+            }
+        });
+
+        // ================== モード初期化 ==================
+        function initUserMode() {
+            document.getElementById('screen-staff').classList.remove('active');
+            document.getElementById('screen-record').classList.remove('hidden');
+            document.getElementById('screen-history').classList.add('hidden');
+            document.getElementById('screen-doctor').classList.add('hidden');
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.tab === 'record') btn.classList.add('active');
+            });
+            displayHistory();
+        }
+
+        function initStaffMode() {
+            document.getElementById('screen-record').classList.add('hidden');
+            document.getElementById('screen-history').classList.add('hidden');
+            document.getElementById('screen-doctor').classList.add('hidden');
+            document.getElementById('screen-staff').classList.add('active');
+            displayStaffRecords();
+        }
+
+        // ================== スタッフ画面機能 ==================
+        function displayStaffRecords() {
+            const records = loadRecords();
+            const staffRecordList = document.getElementById('staffRecordList');
+
+            if (records.length === 0) {
+                staffRecordList.innerHTML = '<p class="text-xl text-gray-500 text-center py-8">記録がありません</p>';
+                return;
+            }
+
+            // 新しい順に並び替え
+            records.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            staffRecordList.innerHTML = records.map(record => {
+                const dateObj = new Date(record.date + 'T00:00:00');
+                const dateString = dateObj.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+                const symptomsText = record.symptoms.length > 0 ? record.symptoms.join('、') : '（症状なし）';
+
+                return `
+                    <div class="record-card rounded-xl p-6">
+                        <h4 class="text-2xl font-bold text-text-dark mb-2">${dateString}</h4>
+                        <p class="text-lg text-text-dark mb-2">
+                            <span class="font-bold">様子：</span>${symptomsText}
+                        </p>
+                        ${record.memo ? `<p class="text-lg text-gray-600">備考：${record.memo}</p>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // CSVエクスポート
+        document.getElementById('btnStaffExport').addEventListener('click', () => {
+            const records = loadRecords();
+            if (records.length === 0) {
+                alert('エクスポートする記録がありません');
+                return;
+            }
+
+            // CSV形式で出力
+            let csv = '日付,曜日,記録日時,症状,備考\n';
+            
+            records.sort((a, b) => new Date(a.date) - new Date(b.date));
+            records.forEach(record => {
+                const dateObj = new Date(record.date + 'T00:00:00');
+                const dateString = dateObj.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
+                const weekday = dateObj.toLocaleDateString('ja-JP', { weekday: 'short' });
+                const createdAt = new Date(record.createdAt).toLocaleString('ja-JP');
+                const symptoms = record.symptoms.join('、');
+                const memo = record.memo ? record.memo.replace(/\n/g, ' ') : '';
+                
+                // CSV形式のエスケープ
+                csv += `"${dateString}","${weekday}","${createdAt}","${symptoms}","${memo}"\n`;
+            });
+
+            // ダウンロード
+            const blob = new Blob([csv], { type: 'text/csv; charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `記録_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+        });
+
+        // スタッフログアウト
+        document.getElementById('btnStaffLogout').addEventListener('click', () => {
+            if (confirm('ログアウトしますか？')) {
+                localStorage.removeItem('appMode');
+                location.reload();
+            }
+        });
+
+        // ================== 基本関数 ==================
+        // localStorageからデータを取得
+        function loadRecords() {
+            const stored = localStorage.getItem('medicalRecords');
+            return stored ? JSON.parse(stored) : [];
+        }
+
+        // localStorageにデータを保存
+        function saveRecords(records) {
+            localStorage.setItem('medicalRecords', JSON.stringify(records));
+        }
+
+        // 今日の日付をYYYY-MM-DD形式で取得
+        function getTodayString() {
+            const today = new Date();
+            return today.toISOString().split('T')[0];
+        }
+
+        // ================== 利用者モード用変数 ==================
+        let selectedSymptoms = [];
+        let medicineImageData = null;
+
+        // ================== 「記録する」画面 ==================
+        document.getElementById('recordDate').valueAsDate = new Date();
+
+        // 症状ボタンのクリック処理
+        document.querySelectorAll('.symptom-toggle').forEach(button => {
+            button.addEventListener('click', () => {
+                const symptom = button.dataset.symptom;
+                if (button.classList.contains('selected')) {
+                    button.classList.remove('selected');
+                    selectedSymptoms = selectedSymptoms.filter(s => s !== symptom);
+                } else {
+                    button.classList.add('selected');
+                    selectedSymptoms.push(symptom);
+                }
+            });
+        });
+
+        // 保存ボタン
+        document.getElementById('btnSaveRecord').addEventListener('click', () => {
+            const date = document.getElementById('recordDate').value;
+            const memo = document.getElementById('recordMemo').value;
+
+            if (!date) {
+                alert('日付を選んでください');
+                return;
+            }
+
+            const records = loadRecords();
+            const newRecord = {
+                id: Date.now(),
+                date: date,
+                symptoms: selectedSymptoms,
+                memo: memo,
+                createdAt: new Date().toISOString()
+            };
+
+            records.push(newRecord);
+            saveRecords(records);
+
+            // 成功メッセージを表示
+            const messageDiv = document.getElementById('recordSaveMessage');
+            messageDiv.classList.remove('hidden');
+            setTimeout(() => messageDiv.classList.add('hidden'), 2000);
+
+            // フォームをリセット
+            selectedSymptoms = [];
+            document.querySelectorAll('.symptom-toggle').forEach(btn => btn.classList.remove('selected'));
+            document.getElementById('recordMemo').value = '';
+            document.getElementById('recordDate').valueAsDate = new Date();
+
+            // 履歴画面を更新
+            displayHistory();
+        });
+
+        // ================== 「履歴を見る」画面 ==================
+        function displayHistory() {
+            const records = loadRecords();
+            const historyList = document.getElementById('historyList');
+
+            if (records.length === 0) {
+                historyList.innerHTML = '<p class="text-xl text-gray-500 text-center py-8">まだ記録がありません</p>';
+                return;
+            }
+
+            // 新しい順に並び替え
+            records.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            historyList.innerHTML = records.map(record => {
+                const dateObj = new Date(record.date + 'T00:00:00');
+                const dateString = dateObj.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+                const symptomsText = record.symptoms.length > 0 ? record.symptoms.join('、') : '（症状なし）';
+                const memoPreview = record.memo ? record.memo.substring(0, 50) + (record.memo.length > 50 ? '...' : '') : '（メモなし）';
+
+                return `
+                    <div class="record-card rounded-xl p-6">
+                        <div class="flex justify-between items-start gap-4 mb-3">
+                            <div>
+                                <h3 class="text-2xl font-bold text-text-dark">${dateString}</h3>
+                                <p class="text-lg text-text-dark mt-2">
+                                    <span class="font-bold text-soft-green">症状：</span>${symptomsText}
+                                </p>
+                                <p class="text-lg text-gray-600 mt-2">${memoPreview}</p>
+                            </div>
+                            <button class="btn-danger px-6 py-3 text-lg rounded-lg font-bold flex-shrink-0" onclick="deleteRecord(${record.id})">
+                                削除
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function deleteRecord(id) {
+            if (confirm('この記録を削除しますか？')) {
+                let records = loadRecords();
+                records = records.filter(r => r.id !== id);
+                saveRecords(records);
+                displayHistory();
+            }
+        }
+
+        // ================== 「医師へ伝える」画面 ==================
+        document.getElementById('btnGenerateText').addEventListener('click', () => {
+            const startDate = document.getElementById('periodStart').value;
+            const endDate = document.getElementById('periodEnd').value;
+
+            if (!startDate || !endDate) {
+                alert('開始日と終了日を選んでください');
+                return;
+            }
+
+            const records = loadRecords();
+            const filteredRecords = records.filter(r => r.date >= startDate && r.date <= endDate);
+            
+            if (filteredRecords.length === 0) {
+                alert('指定期間に記録がありません');
+                return;
+            }
+
+            // ソート
+            filteredRecords.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // テキスト生成
+            let output = `【こころと からだの ノート 診察用サマリー】\n`;
+            output += `記録期間：${new Date(startDate).toLocaleDateString('ja-JP')} ～ ${new Date(endDate).toLocaleDateString('ja-JP')}\n`;
+            output += `記録日数：${filteredRecords.length}日\n\n`;
+
+            // ========== 【重要】期間全体の傾向 ==========
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            output += `【📊 この期間の主な様子（先生へのポイント）】\n`;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+            // 症状の集計
+            const symptomCount = {};
+            const symptomsWithMemo = {};
+            filteredRecords.forEach(record => {
+                record.symptoms.forEach(symptom => {
+                    symptomCount[symptom] = (symptomCount[symptom] || 0) + 1;
+                    if (!symptomsWithMemo[symptom]) {
+                        symptomsWithMemo[symptom] = [];
+                    }
+                    if (record.memo) {
+                        symptomsWithMemo[symptom].push(record.memo);
+                    }
+                });
+            });
+
+            // 最多症状TOP3
+            const topSymptoms = Object.entries(symptomCount)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 3);
+
+            if (topSymptoms.length === 0) {
+                output += `✓ 特に気になることなし。安定した時期です。\n\n`;
+            } else {
+                output += `【最も多く見られた様子（出現頻度順）】\n`;
+                topSymptoms.forEach(([ symptom, count ], index) => {
+                    output += `${index + 1}. ${symptom}：${count}日間に見られた\n`;
+                });
+                output += '\n';
+            }
+
+            // 記録に含まれるメモを分析
+            const memos = filteredRecords
+                .filter(r => r.memo && r.memo.trim())
+                .map(r => r.memo);
+
+            if (memos.length > 0) {
+                output += `【保護者からの特記事項】\n`;
+                const uniqueMemos = [...new Set(memos)].slice(0, 5); // 重複排除、最大5件
+                uniqueMemos.forEach(memo => {
+                    output += `・${memo}\n`;
+                });
+                output += '\n';
+            }
+
+            // 症状あり/なしの日数
+            const daysWithSymptoms = filteredRecords.filter(r => r.symptoms.length > 0).length;
+            const daysWithoutSymptoms = filteredRecords.length - daysWithSymptoms;
+            output += `【経過の安定性】\n`;
+            output += `・様子に変化がなかった日：${daysWithoutSymptoms}日\n`;
+            output += `・何らかの様子が見られた日：${daysWithSymptoms}日\n`;
+            const stabilityRate = Math.round((daysWithoutSymptoms / filteredRecords.length) * 100);
+            output += `・安定度：${stabilityRate}%\n\n`;
+
+            // ========== 【詳細】週ごとの推移 ==========
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            output += `【📅 週ごとの詳しい記録】\n`;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+            // 週ごとにグループ化
+            const weeks = {};
+            filteredRecords.forEach(record => {
+                const date = new Date(record.date + 'T00:00:00');
+                const weekStart = new Date(date);
+                weekStart.setDate(date.getDate() - date.getDay());
+                const weekKey = weekStart.toISOString().split('T')[0];
+                
+                if (!weeks[weekKey]) {
+                    weeks[weekKey] = [];
+                }
+                weeks[weekKey].push(record);
+            });
+
+            Object.entries(weeks).forEach(([weekKey, weekRecords]) => {
+                const startDateObj = new Date(weekKey);
+                const endDateObj = new Date(startDateObj);
+                endDateObj.setDate(endDateObj.getDate() + 6);
+                
+                output += `第${Math.ceil(((new Date(weekKey) - new Date(startDate)) / (1000 * 60 * 60 * 24)) / 7)}週 `;
+                output += `(${startDateObj.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })} ～ ${endDateObj.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })})\n`;
+                
+                weekRecords.forEach(record => {
+                    const dateObj = new Date(record.date + 'T00:00:00');
+                    const dateString = dateObj.toLocaleDateString('ja-JP', { weekday: 'short' });
+                    output += `　${record.date} (${dateString})：`;
+                    
+                    if (record.symptoms.length === 0) {
+                        output += `変わりなし`;
+                    } else {
+                        output += record.symptoms.join('、');
+                    }
+                    
+                    if (record.memo) {
+                        output += `｜${record.memo}`;
+                    }
+                    output += '\n';
+                });
+                output += '\n';
+            });
+
+            // ========== 【補足】全記録一覧 ==========
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            output += `【📋 日ごとの全記録（参考）】\n`;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            
+            filteredRecords.forEach(record => {
+                const dateObj = new Date(record.date + 'T00:00:00');
+                const dateString = dateObj.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+                output += `${dateString}\n`;
+                
+                if (record.symptoms.length === 0) {
+                    output += `　様子：特に変わったことなし\n`;
+                } else {
+                    output += `　様子：${record.symptoms.join('、')}\n`;
+                }
+                
+                if (record.memo) {
+                    output += `　備考：${record.memo}\n`;
+                }
+                output += '\n';
+            });
+
+            // 表示
+            document.getElementById('outputText').textContent = output;
+            document.getElementById('outputContainer').classList.remove('hidden');
+            document.getElementById('noDataMessage').classList.add('hidden');
+        });
+
+        // テキストコピー
+        document.getElementById('btnCopyText').addEventListener('click', () => {
+            const text = document.getElementById('outputText').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                const messageDiv = document.getElementById('copyMessage');
+                messageDiv.classList.remove('hidden');
+                setTimeout(() => messageDiv.classList.add('hidden'), 2000);
+            });
+        });
+
+        // 薬画像ファイル選択
+        document.getElementById('medicineFile').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                medicineImageData = event.target.result;
+                document.getElementById('medicinePreview').src = medicineImageData;
+                document.getElementById('medicinePreviewContainer').classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // 薬画像削除
+        document.getElementById('btnClearMedicine').addEventListener('click', () => {
+            medicineImageData = null;
+            document.getElementById('medicineFile').value = '';
+            document.getElementById('medicinePreviewContainer').classList.add('hidden');
+        });
+
+        // ================== タブナビゲーション（利用者モード用） ==================
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                if (currentMode !== 'user') return; // スタッフモードではタブ切り替え不可
+                
+                // すべてのタブボタンからactiveを削除
+                document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                // すべての利用者画面を非表示に
+                document.querySelectorAll('.screen-container').forEach(screen => screen.classList.add('hidden'));
+
+                // クリックされたボタンをアクティブに
+                button.classList.add('active');
+
+                // 対応する画面を表示
+                const tabName = button.dataset.tab;
+                document.getElementById(`screen-${tabName}`).classList.remove('hidden');
+
+                // 履歴画面を開いた時に更新
+                if (tabName === 'history') {
+                    displayHistory();
+                }
+            });
+        });
+
+        // ================== 利用者モード初期化（ページロード時） ==================
+        // ※ モード選択後に各画面の初期化が走る
+    </script>
+</body>
+</html>
