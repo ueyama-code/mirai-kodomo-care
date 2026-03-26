@@ -80,6 +80,7 @@
         <label style="display:block;font-weight:bold;margin-bottom:6px;">お名前（フルネーム）</label>
         <input type="text" id="setupName" placeholder="例：山田 太郎" style="width:100%;box-sizing:border-box;margin-bottom:16px;">
         <button id="btnSetupNext" class="btn-blue" style="width:100%;padding:14px;font-size:16px;border-radius:12px;">次へ →</button>
+        <button id="btnSetupBack" class="btn-gray" style="width:100%;padding:12px;font-size:15px;border-radius:12px;margin-top:10px;display:none;">← 戻る</button>
     </div>
 </div>
 <!-- OVERLAY 3: 同期コード設定 -->
@@ -269,7 +270,15 @@
                     </div>
                     <button id="btnSaveRecord" class="btn-orange" style="width:100%;padding:16px;font-size:20px;border-radius:12px;">この内容で保存する</button>
                     <div id="saveMessage" style="text-align:center;color:#059669;font-weight:bold;margin-top:10px;display:none;">✓ 保存しました！</div>
-                    <div style="margin-top:18px;padding:12px 14px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;">
+                    <!-- ローカル専用コード警告 -->
+                    <div id="localCodeWarning" style="display:none;margin-top:18px;background:#FEF3C7;border:2px solid #F59E0B;border-radius:12px;padding:14px 16px;">
+                        <p style="font-size:14px;font-weight:bold;color:#92400E;margin-bottom:6px;">⚠️ このコードはローカル専用です</p>
+                        <p style="font-size:13px;color:#92400E;margin-bottom:10px;">スタッフへの共有ができません。クラウドへ移行すると、スタッフと同期コードを共有できるようになります。</p>
+                        <button id="btnMigrateToCloud" class="btn-blue" style="width:100%;padding:11px;font-size:14px;border-radius:10px;">☁️ クラウドへ移行する</button>
+                        <div id="migrateStatus" style="display:none;text-align:center;margin-top:8px;font-size:13px;color:#1E40AF;"></div>
+                    </div>
+                    <!-- 通常の同期コード表示 -->
+                    <div id="syncCodeBox" style="margin-top:18px;padding:12px 14px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;">
                         <p style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">📋 同期コード（スタッフに伝えたり、別の端末で使う時に必要です）</p>
                         <p id="dispUserSyncCode" class="mono" style="font-size:12px;color:#374151;word-break:break-all;margin-bottom:6px;"></p>
                         <button id="btnCopyUserSyncCode" class="btn-gray" style="padding:5px 12px;font-size:12px;border-radius:6px;">コピー</button>
@@ -572,6 +581,16 @@ async function initUserMode() {
     document.getElementById('dispUserSyncCode').textContent  = currentUser.syncId;
     document.getElementById('recordDate').valueAsDate = new Date();
     document.getElementById('tabNav').style.display = 'flex';
+
+    // ローカル専用コードの場合は警告を表示
+    if (currentUser.syncId && currentUser.syncId.startsWith('local-')) {
+        document.getElementById('localCodeWarning').style.display = 'block';
+        document.getElementById('syncCodeBox').style.display = 'none';
+    } else {
+        document.getElementById('localCodeWarning').style.display = 'none';
+        document.getElementById('syncCodeBox').style.display = 'block';
+    }
+
     showScreen('screenRecord');
     await pullFromCloud();
 }
@@ -591,10 +610,18 @@ async function openUserSwitchOverlay() {
         return { name, idx: i };
     }));
     el.innerHTML = items.map(({ name, idx }) => `
-        <div class="switch-item ${idx === currIdx ? 'active-user' : ''}" onclick="switchToUser(${idx})">
-            <span style="font-size:20px;">${idx === currIdx ? '✅' : '👤'}</span>
-            <span style="flex:1;">${name} さん</span>
-            ${idx === currIdx ? '<span style="font-size:12px;opacity:0.7;">（表示中）</span>' : ''}
+        <div class="switch-item ${idx === currIdx ? 'active-user' : ''}"
+             style="display:flex;align-items:center;gap:8px;cursor:default;">
+            <span style="font-size:20px;flex-shrink:0;">${idx === currIdx ? '✅' : '👤'}</span>
+            <span style="flex:1;cursor:pointer;font-size:16px;font-weight:bold;"
+                  onclick="switchToUser(${idx})">${name} さん
+                ${idx === currIdx ? '<span style="font-size:12px;opacity:0.7;font-weight:normal;">（表示中）</span>' : ''}
+            </span>
+            <button onclick="deleteChild(${idx})"
+                style="flex-shrink:0;padding:5px 10px;font-size:12px;border:none;border-radius:8px;
+                       cursor:pointer;background:#FEE2E2;color:#EF4444;font-weight:bold;">
+                🗑️ 削除
+            </button>
         </div>
     `).join('');
 }
@@ -612,13 +639,49 @@ window.switchToUser = async function(idx) {
     document.querySelector('[data-tab="record"]').classList.add('active');
     await initUserMode();
 };
+// お子さんの登録を削除する
+window.deleteChild = async function(idx) {
+    const list = loadUserList();
+    if (idx < 0 || idx >= list.length) return;
+    const key  = await deriveKey(STAFF_PASSCODE, list[idx].salt);
+    const name = await decrypt(list[idx].encryptedName, key);
+    if (!confirm(`「${name} さん」の登録をこの端末から削除しますか？\n\n※クラウドのデータは残ります。同期コードがあれば再登録できます。`)) return;
+    const currIdx = loadCurrentIdx();
+    list.splice(idx, 1);
+    saveUserList(list);
+    if (list.length === 0) {
+        // 全員削除されたらリロードして初期画面へ
+        location.reload();
+        return;
+    }
+    // 削除後のcurrIdx調整
+    let newIdx = currIdx;
+    if (idx < currIdx) {
+        newIdx = currIdx - 1;          // 削除位置が現在より前 → ひとつ繰り上げ
+    } else if (idx === currIdx) {
+        newIdx = Math.min(currIdx, list.length - 1); // 現在のが削除 → 同位置 or 末尾
+    }
+    saveCurrentIdx(newIdx);
+    currentUser = list[newIdx];
+    // 一覧を再描画
+    await openUserSwitchOverlay();
+};
 document.getElementById('btnUserSwitchClose').addEventListener('click', () => {
     document.getElementById('ovUserSwitch').classList.add('hidden');
 });
 document.getElementById('btnAddNewChild').addEventListener('click', () => {
     document.getElementById('ovUserSwitch').classList.add('hidden');
     document.getElementById('setupName').value = '';
+    // 切り替え画面から来たことを記録し、「戻る」ボタンを表示
+    document.getElementById('btnSetupBack').style.display = 'block';
     document.getElementById('ovSetup').classList.remove('hidden');
+});
+// 「← 戻る」: 名前入力をキャンセルして切り替え画面に戻る
+document.getElementById('btnSetupBack').addEventListener('click', async () => {
+    document.getElementById('ovSetup').classList.add('hidden');
+    document.getElementById('btnSetupBack').style.display = 'none';
+    document.getElementById('setupName').value = '';
+    await openUserSwitchOverlay();
 });
 // ================================================================
 //  スタッフモード初期化
@@ -715,6 +778,44 @@ document.getElementById('btnCopyUserSyncCode').addEventListener('click', () => {
         btn.textContent = '✓ コピー済み';
         setTimeout(() => btn.textContent = 'コピー', 2000);
     });
+});
+
+// ================================================================
+//  ローカル→クラウド移行
+// ================================================================
+document.getElementById('btnMigrateToCloud').addEventListener('click', async () => {
+    const btn    = document.getElementById('btnMigrateToCloud');
+    const status = document.getElementById('migrateStatus');
+    btn.disabled = true;
+    btn.textContent = '⏳ 移行中...';
+    status.style.display = 'block';
+    status.textContent = 'クラウドに接続しています...';
+    try {
+        // 現在のローカルデータをJSONblobへアップロード
+        const blob = {
+            userId:        currentUser.userId,
+            salt:          currentUser.salt,
+            encryptedName: currentUser.encryptedName,
+            records:       currentUser.records || [],
+            createdAt:     new Date().toISOString()
+        };
+        const newSyncId = await blobCreate(blob);
+        // syncId を更新
+        currentUser.syncId = newSyncId;
+        saveCurrentUserToList();
+        // 表示を更新
+        document.getElementById('dispUserSyncCode').textContent = newSyncId;
+        document.getElementById('localCodeWarning').style.display = 'none';
+        document.getElementById('syncCodeBox').style.display = 'block';
+        // ヘッダーのステータスも更新
+        setSyncStatus('ok', '同期済み');
+        alert('✅ クラウドへの移行が完了しました！\n\n新しい同期コードをスタッフに伝えてください。\n\n' + newSyncId);
+    } catch {
+        btn.disabled = false;
+        btn.textContent = '☁️ クラウドへ移行する';
+        status.textContent = '❌ 移行に失敗しました。ネットワークを確認して再試行してください。';
+        status.style.color = '#EF4444';
+    }
 });
 // ================================================================
 //  履歴表示
