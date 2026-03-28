@@ -571,9 +571,28 @@
                 <div id="screen-history" class="screen-container hidden">
                     <div class="mt-6">
                         <h2 class="text-3xl font-bold text-text-dark mb-4">記録した履歴</h2>
-                        <button id="btnUserGenerateSyncCode" class="w-full mb-6 py-4 text-xl font-bold rounded-xl text-white" style="background: #8B5CF6;">
+                        <button id="btnUserGenerateSyncCode" class="w-full mb-4 py-4 text-xl font-bold rounded-xl text-white" style="background: #8B5CF6;">
                             📤 スタッフへ共有する（同期コードを生成）
                         </button>
+
+                        <!-- 期間指定削除 -->
+                        <div class="mb-6 p-5 rounded-xl" style="background: #FEE2E2; border: 2px solid #EF4444;">
+                            <p class="text-xl font-bold mb-3" style="color: #991B1B;">🗑️ 期間を指定して記録を削除</p>
+                            <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                                <div style="flex: 1;">
+                                    <label class="block text-lg font-bold mb-1" style="color: #991B1B;">開始日</label>
+                                    <input type="date" id="deleteStart" class="w-full">
+                                </div>
+                                <div style="flex: 1;">
+                                    <label class="block text-lg font-bold mb-1" style="color: #991B1B;">終了日</label>
+                                    <input type="date" id="deleteEnd" class="w-full">
+                                </div>
+                            </div>
+                            <button id="btnDeleteByPeriod" class="btn-danger w-full py-4 text-xl rounded-xl font-bold">
+                                この期間の記録を削除する
+                            </button>
+                        </div>
+
                         <div id="historyList" class="space-y-4">
                             <p class="text-xl text-gray-500 text-center py-8">まだ記録がありません</p>
                         </div>
@@ -649,6 +668,20 @@
 
                             <div id="copyMessage" class="text-center text-lg font-bold text-soft-green hidden mt-4">
                                 ✓ コピーしました！
+                            </div>
+
+                            <!-- 期間削除の選択 -->
+                            <div id="deleteAfterCopySection" class="mt-6 p-5 rounded-xl" style="background: #FFF3CD; border: 2px solid #FFC107;">
+                                <p class="text-xl font-bold mb-4" style="color: #856404;">🗑️ この期間の記録を削除しますか？</p>
+                                <p class="text-lg mb-4" style="color: #856404;">テキストを作成した期間の記録を削除できます。</p>
+                                <div style="display: flex; gap: 10px;">
+                                    <button id="btnDeletePeriodRecords" class="btn-danger flex-1 py-4 text-xl rounded-xl font-bold">
+                                        削除する
+                                    </button>
+                                    <button id="btnKeepPeriodRecords" class="flex-1 py-4 text-xl rounded-xl font-bold" style="background: #6B7280; color: white; border: none; cursor: pointer;">
+                                        削除しない
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -1180,6 +1213,10 @@
             document.getElementById('outputText').textContent = output;
             document.getElementById('outputContainer').classList.remove('hidden');
             document.getElementById('noDataMessage').classList.add('hidden');
+            // 期間を保存して削除選択を表示
+            currentPeriodStart = startDate;
+            currentPeriodEnd = endDate;
+            document.getElementById('deleteAfterCopySection').classList.remove('hidden');
         });
 
         // テキストコピー
@@ -1211,6 +1248,56 @@
             medicineImageData = null;
             document.getElementById('medicineFile').value = '';
             document.getElementById('medicinePreviewContainer').classList.add('hidden');
+        });
+
+        // ================== 期間指定削除（履歴画面） ==================
+        document.getElementById('btnDeleteByPeriod').addEventListener('click', () => {
+            const start = document.getElementById('deleteStart').value;
+            const end = document.getElementById('deleteEnd').value;
+            if (!start || !end) {
+                alert('開始日と終了日を両方選んでください');
+                return;
+            }
+            if (start > end) {
+                alert('開始日は終了日より前にしてください');
+                return;
+            }
+            const records = loadRecords();
+            const targets = records.filter(r => r.date >= start && r.date <= end);
+            if (targets.length === 0) {
+                alert('指定期間に記録がありません');
+                return;
+            }
+            if (confirm(`${start} ～ ${end} の記録（${targets.length}件）を削除しますか？`)) {
+                const remaining = records.filter(r => r.date < start || r.date > end);
+                saveRecords(remaining);
+                document.getElementById('deleteStart').value = '';
+                document.getElementById('deleteEnd').value = '';
+                displayHistory();
+                alert(`${targets.length}件の記録を削除しました`);
+            }
+        });
+
+        // ================== 先生へテキスト作成後の期間削除 ==================
+        let currentPeriodStart = null;
+        let currentPeriodEnd = null;
+
+        document.getElementById('btnDeletePeriodRecords').addEventListener('click', () => {
+            if (!currentPeriodStart || !currentPeriodEnd) return;
+            const records = loadRecords();
+            const targets = records.filter(r => r.date >= currentPeriodStart && r.date <= currentPeriodEnd);
+            if (confirm(`${currentPeriodStart} ～ ${currentPeriodEnd} の記録（${targets.length}件）を削除します。よろしいですか？`)) {
+                const remaining = records.filter(r => r.date < currentPeriodStart || r.date > currentPeriodEnd);
+                saveRecords(remaining);
+                document.getElementById('deleteAfterCopySection').classList.add('hidden');
+                document.getElementById('outputContainer').classList.add('hidden');
+                document.getElementById('noDataMessage').classList.remove('hidden');
+                alert(`${targets.length}件の記録を削除しました`);
+            }
+        });
+
+        document.getElementById('btnKeepPeriodRecords').addEventListener('click', () => {
+            document.getElementById('deleteAfterCopySection').classList.add('hidden');
         });
 
         // ================== タブナビゲーション（利用者モード用） ==================
