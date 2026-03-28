@@ -570,7 +570,10 @@
                 <!-- 履歴を見る画面 -->
                 <div id="screen-history" class="screen-container hidden">
                     <div class="mt-6">
-                        <h2 class="text-3xl font-bold text-text-dark mb-6">記録した履歴</h2>
+                        <h2 class="text-3xl font-bold text-text-dark mb-4">記録した履歴</h2>
+                        <button id="btnUserGenerateSyncCode" class="w-full mb-6 py-4 text-xl font-bold rounded-xl text-white" style="background: #8B5CF6;">
+                            📤 スタッフへ共有する（同期コードを生成）
+                        </button>
                         <div id="historyList" class="space-y-4">
                             <p class="text-xl text-gray-500 text-center py-8">まだ記録がありません</p>
                         </div>
@@ -819,6 +822,18 @@
             link.href = URL.createObjectURL(blob);
             link.download = `記録_${new Date().toISOString().split('T')[0]}.csv`;
             link.click();
+        });
+
+        // 利用者側の同期コード生成ボタン
+        document.getElementById('btnUserGenerateSyncCode').addEventListener('click', () => {
+            const records = loadRecords();
+            if (records.length === 0) {
+                alert('共有する記録がありません');
+                return;
+            }
+            const code = btoa(unescape(encodeURIComponent(JSON.stringify(records))));
+            document.getElementById('syncCodeDisplay').value = code;
+            document.getElementById('syncCodeModal').classList.remove('hidden');
         });
 
         // 同期コード生成
