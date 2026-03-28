@@ -412,6 +412,25 @@
         </div>
     </div>
 
+    <!-- アカウント選択画面 -->
+    <div id="accountSelectOverlay" class="login-overlay hidden">
+        <div class="login-card" style="max-width: 440px;">
+            <h2>アカウントを選んでください</h2>
+            <p style="margin-bottom: 16px;">記録するお子さんを選んでください</p>
+            <div id="accountList" class="login-buttons" style="margin-bottom: 16px;"></div>
+            <div id="addAccountSection">
+                <div class="sync-divider">アカウントを追加する</div>
+                <input type="text" id="newAccountName" placeholder="呼び名（例：たろう、A君）" style="font-size: 20px !important; padding: 12px !important; border: 2px solid #93C5FD !important; border-radius: 12px; width: 100%; box-sizing: border-box; margin-bottom: 10px;">
+                <button id="btnAddAccount" class="login-btn login-btn-user">
+                    ＋ 追加する
+                </button>
+            </div>
+            <button id="btnBackFromAccount" class="login-btn login-btn-staff" style="margin-top: 12px;">
+                戻る
+            </button>
+        </div>
+    </div>
+
     <!-- スタッフパスコード入力画面 -->
     <div id="staffLoginOverlay" class="login-overlay hidden">
         <div class="login-card" style="max-width: 440px;">
@@ -475,20 +494,28 @@
                 <!-- スタッフ用ダッシュボード -->
                 <div id="screen-staff" class="screen-container staff-screen">
                     <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 mt-6">
-                        <div class="flex items-center justify-between mb-6">
+                        <div class="flex items-center justify-between mb-4">
                             <h2 class="text-3xl font-bold text-text-dark">スタッフ管理画面</h2>
                             <span class="staff-view-badge">スタッフ</span>
                         </div>
+                        <div id="staffNicknameDisplay" class="mb-6 p-4 rounded-xl hidden" style="background: #F0FDF4; border: 2px solid #86EFAC;">
+                            <p class="text-xl font-bold" style="color: #166534;">👤 <span id="staffNicknameText"></span> さんの記録</p>
+                        </div>
 
                         <!-- スタッフ操作ボタン -->
-                        <div class="staff-action-buttons">
+                        <div class="staff-action-buttons" style="grid-template-columns: 1fr 1fr;">
                             <button id="btnStaffExport" class="staff-action-btn staff-action-btn-export">
                                 📥 CSVエクスポート
                             </button>
                             <button id="btnGenerateSyncCode" class="staff-action-btn staff-action-btn-sync">
                                 📤 同期コード生成
                             </button>
-                            <button id="btnStaffLogout" class="staff-action-btn staff-action-btn-logout">
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                            <button id="btnStaffToUser" class="staff-action-btn" style="flex:1; background: #3B82F6; color: white;">
+                                👤 利用者モードに切替
+                            </button>
+                            <button id="btnStaffLogout" class="staff-action-btn staff-action-btn-logout" style="flex:1;">
                                 🚪 ログアウト
                             </button>
                         </div>
@@ -506,9 +533,18 @@
                 <!-- 記録する画面 -->
                 <div id="screen-record" class="screen-container hidden">
                     <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 mt-6">
+                        <!-- アカウント情報バー -->
+                        <div id="accountInfoBar" class="mb-4 p-4 rounded-xl" style="background: #EFF6FF; border: 2px solid #93C5FD; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                            <span class="text-xl font-bold" style="color: #1D4ED8;">👤 <span id="currentAccountName">---</span></span>
+                            <div style="display: flex; gap: 6px;">
+                                <button id="btnSwitchAccount" class="py-2 px-4 rounded-lg font-bold text-sm text-white" style="background: #3B82F6; border: none; cursor: pointer;">切替</button>
+                                <button id="btnToStaffMode" class="py-2 px-4 rounded-lg font-bold text-sm text-white" style="background: #EC4899; border: none; cursor: pointer;">スタッフへ</button>
+                            </div>
+                        </div>
+
                         <h2 class="text-3xl font-bold text-text-dark mb-2">本日の様子を記録</h2>
-                        <p class="text-lg text-gray-600 mb-6">保護者の方が、お子さんの今日の様子を記録してください</p>
-                        
+                        <p class="text-lg text-gray-600 mb-4">保護者の方が、お子さんの今日の様子を記録してください</p>
+
                         <!-- 日付選択 -->
                         <div class="mb-8">
                             <label class="block text-2xl font-bold text-text-dark mb-3">日付を選ぶ</label>
@@ -713,30 +749,145 @@
         const STAFF_PASSCODE = '1234'; // スタッフ用パスコード（事業所で設定）
         let currentMode = 'user'; // 'user' または 'staff'
 
-        // 初期化：ログイン画面を表示
+        // ================== データ移行（旧形式→新形式） ==================
+        function migrateData() {
+            if (localStorage.getItem('accounts')) return;
+            const records = JSON.parse(localStorage.getItem('medicalRecords') || '[]');
+            const nickname = localStorage.getItem('userNickname') || '';
+            if (records.length > 0 || nickname) {
+                const accounts = [{ id: Date.now(), nickname: nickname || '利用者1', records: records }];
+                localStorage.setItem('accounts', JSON.stringify(accounts));
+                localStorage.setItem('currentAccountId', String(accounts[0].id));
+                localStorage.removeItem('medicalRecords');
+                localStorage.removeItem('userNickname');
+            }
+        }
+
+        // ================== アカウント管理関数 ==================
+        function loadAccounts() {
+            return JSON.parse(localStorage.getItem('accounts') || '[]');
+        }
+        function saveAccounts(accounts) {
+            localStorage.setItem('accounts', JSON.stringify(accounts));
+        }
+        function getCurrentAccount() {
+            const accounts = loadAccounts();
+            const id = Number(localStorage.getItem('currentAccountId'));
+            return accounts.find(a => a.id === id) || null;
+        }
+        function addAccount(nickname) {
+            const accounts = loadAccounts();
+            const newAccount = { id: Date.now(), nickname: nickname, records: [] };
+            accounts.push(newAccount);
+            saveAccounts(accounts);
+            localStorage.setItem('currentAccountId', String(newAccount.id));
+            return newAccount;
+        }
+        function deleteAccount(id) {
+            let accounts = loadAccounts();
+            accounts = accounts.filter(a => a.id !== id);
+            saveAccounts(accounts);
+            if (String(id) === localStorage.getItem('currentAccountId')) {
+                localStorage.removeItem('currentAccountId');
+            }
+        }
+
+        function renderAccountList() {
+            const accounts = loadAccounts();
+            const list = document.getElementById('accountList');
+            if (accounts.length === 0) {
+                list.innerHTML = '<p style="color: #999; text-align: center; padding: 12px;">アカウントがありません</p>';
+                return;
+            }
+            list.innerHTML = accounts.map(a => `
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="login-btn login-btn-user account-select-btn" data-id="${a.id}" style="flex: 1; text-align: left; padding: 14px 18px;">
+                        👤 ${a.nickname} <span style="font-size:13px; opacity:0.8;">(${a.records.length}件)</span>
+                    </button>
+                    <button class="account-delete-btn" data-id="${a.id}" style="background: #EF4444; color: white; border: none; border-radius: 8px; padding: 14px 12px; cursor: pointer; font-weight: bold; font-size: 14px;">🗑️</button>
+                </div>
+            `).join('');
+            list.querySelectorAll('.account-select-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    localStorage.setItem('currentAccountId', btn.dataset.id);
+                    localStorage.setItem('appMode', 'user');
+                    document.getElementById('accountSelectOverlay').classList.add('hidden');
+                    currentMode = 'user';
+                    initUserMode();
+                    updateModeIndicator();
+                });
+            });
+            list.querySelectorAll('.account-delete-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const acc = loadAccounts().find(a => a.id === Number(btn.dataset.id));
+                    if (confirm(`「${acc.nickname}」のアカウントと記録をすべて削除します。\nこの操作は元に戻せません。よろしいですか？`)) {
+                        deleteAccount(Number(btn.dataset.id));
+                        renderAccountList();
+                    }
+                });
+            });
+        }
+
+        function showAccountSelect() {
+            document.getElementById('loginOverlay').classList.add('hidden');
+            document.getElementById('staffLoginOverlay').classList.add('hidden');
+            document.getElementById('accountSelectOverlay').classList.remove('hidden');
+            document.getElementById('newAccountName').value = '';
+            renderAccountList();
+        }
+
+        function updateModeIndicator() {
+            const indicator = document.getElementById('modeIndicator');
+            if (currentMode === 'staff') {
+                indicator.textContent = '👨‍⚕️ スタッフモード';
+                indicator.classList.remove('user-mode');
+                indicator.classList.add('staff-mode');
+            } else {
+                const account = getCurrentAccount();
+                indicator.textContent = account ? `👤 ${account.nickname}` : '👤 利用者モード';
+                indicator.classList.remove('staff-mode');
+                indicator.classList.add('user-mode');
+            }
+        }
+
+        // ================== 初期化 ==================
         window.addEventListener('load', () => {
+            migrateData();
             const mode = localStorage.getItem('appMode');
             if (mode === 'staff') {
-                // スタッフモードで保存されていた場合
                 currentMode = 'staff';
                 initStaffMode();
                 document.getElementById('loginOverlay').classList.add('hidden');
-            } else {
+                updateModeIndicator();
+            } else if (mode === 'user' && getCurrentAccount()) {
                 currentMode = 'user';
+                document.getElementById('loginOverlay').classList.add('hidden');
+                initUserMode();
+                updateModeIndicator();
+            } else {
                 document.getElementById('loginOverlay').classList.remove('hidden');
             }
         });
 
         // ================== ログイン処理 ==================
         document.getElementById('btnUserMode').addEventListener('click', () => {
-            currentMode = 'user';
+            showAccountSelect();
+        });
+
+        document.getElementById('btnAddAccount').addEventListener('click', () => {
+            const name = document.getElementById('newAccountName').value.trim();
+            if (!name) { alert('呼び名を入力してください'); return; }
+            addAccount(name);
             localStorage.setItem('appMode', 'user');
-            document.getElementById('loginOverlay').classList.add('hidden');
-            document.getElementById('staffLoginOverlay').classList.add('hidden');
+            document.getElementById('accountSelectOverlay').classList.add('hidden');
+            currentMode = 'user';
             initUserMode();
-            document.getElementById('modeIndicator').textContent = '👤 利用者モード';
-            document.getElementById('modeIndicator').classList.remove('staff-mode');
-            document.getElementById('modeIndicator').classList.add('user-mode');
+            updateModeIndicator();
+        });
+
+        document.getElementById('btnBackFromAccount').addEventListener('click', () => {
+            document.getElementById('accountSelectOverlay').classList.add('hidden');
+            document.getElementById('loginOverlay').classList.remove('hidden');
         });
 
         document.getElementById('btnStaffLogin').addEventListener('click', () => {
@@ -753,9 +904,7 @@
                 localStorage.setItem('appMode', 'staff');
                 document.getElementById('staffLoginOverlay').classList.add('hidden');
                 initStaffMode();
-                document.getElementById('modeIndicator').textContent = '👨‍⚕️ スタッフモード';
-                document.getElementById('modeIndicator').classList.remove('user-mode');
-                document.getElementById('modeIndicator').classList.add('staff-mode');
+                updateModeIndicator();
             } else {
                 document.getElementById('staffLoginError').style.display = 'block';
             }
@@ -767,11 +916,23 @@
             document.getElementById('staffPasscode').value = '';
         });
 
-        // スタッフパスコード入力時にEnterキー対応
         document.getElementById('staffPasscode').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                document.getElementById('btnStaffSubmit').click();
-            }
+            if (e.key === 'Enter') { document.getElementById('btnStaffSubmit').click(); }
+        });
+
+        // ================== モード切替ボタン ==================
+        document.getElementById('btnSwitchAccount').addEventListener('click', () => {
+            showAccountSelect();
+        });
+
+        document.getElementById('btnToStaffMode').addEventListener('click', () => {
+            document.getElementById('staffLoginOverlay').classList.remove('hidden');
+            document.getElementById('staffPasscode').value = '';
+            document.getElementById('staffLoginError').style.display = 'none';
+        });
+
+        document.getElementById('btnStaffToUser').addEventListener('click', () => {
+            showAccountSelect();
         });
 
         // ================== モード初期化 ==================
@@ -784,6 +945,9 @@
                 btn.classList.remove('active');
                 if (btn.dataset.tab === 'record') btn.classList.add('active');
             });
+            // アカウント名をバーに表示
+            const account = getCurrentAccount();
+            document.getElementById('currentAccountName').textContent = account ? account.nickname : '---';
             displayHistory();
         }
 
@@ -792,6 +956,16 @@
             document.getElementById('screen-history').classList.add('hidden');
             document.getElementById('screen-doctor').classList.add('hidden');
             document.getElementById('screen-staff').classList.add('active');
+            // ニックネーム表示
+            const nicknameDisplay = document.getElementById('staffNicknameDisplay');
+            const nicknameText = document.getElementById('staffNicknameText');
+            const nickname = sessionNickname || (getCurrentAccount() ? getCurrentAccount().nickname : null);
+            if (nickname) {
+                nicknameText.textContent = nickname;
+                nicknameDisplay.classList.remove('hidden');
+            } else {
+                nicknameDisplay.classList.add('hidden');
+            }
             displayStaffRecords();
         }
 
@@ -857,29 +1031,30 @@
             link.click();
         });
 
-        // 利用者側の同期コード生成ボタン
-        document.getElementById('btnUserGenerateSyncCode').addEventListener('click', () => {
+        // 同期コード生成の共通関数
+        function generateSyncCodeAndShow() {
             const records = loadRecords();
             if (records.length === 0) {
                 alert('共有する記録がありません');
                 return;
             }
-            const code = btoa(unescape(encodeURIComponent(JSON.stringify(records))));
+            const account = getCurrentAccount();
+            const nickname = account ? account.nickname : '';
+            const payload = { nickname: nickname, records: records };
+            const code = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+            const modal = document.getElementById('syncCodeModal');
+            modal.querySelector('p').textContent = nickname
+                ? `${nickname} さんの記録をスタッフへ共有します。コードをコピーしてLINEやメールで送ってください。`
+                : 'このコードをコピーして、LINEやメールでスタッフへ送ってください。';
             document.getElementById('syncCodeDisplay').value = code;
-            document.getElementById('syncCodeModal').classList.remove('hidden');
-        });
+            modal.classList.remove('hidden');
+        }
 
-        // 同期コード生成
-        document.getElementById('btnGenerateSyncCode').addEventListener('click', () => {
-            const records = loadRecords();
-            if (records.length === 0) {
-                alert('共有する記録がありません');
-                return;
-            }
-            const code = btoa(unescape(encodeURIComponent(JSON.stringify(records))));
-            document.getElementById('syncCodeDisplay').value = code;
-            document.getElementById('syncCodeModal').classList.remove('hidden');
-        });
+        // 利用者側の同期コード生成ボタン
+        document.getElementById('btnUserGenerateSyncCode').addEventListener('click', generateSyncCodeAndShow);
+
+        // 同期コード生成（スタッフ側）
+        document.getElementById('btnGenerateSyncCode').addEventListener('click', generateSyncCodeAndShow);
 
         document.getElementById('btnCopySyncCode').addEventListener('click', () => {
             const code = document.getElementById('syncCodeDisplay').value;
@@ -909,8 +1084,16 @@
             }
             try {
                 const decoded = JSON.parse(decodeURIComponent(escape(atob(code))));
-                if (!Array.isArray(decoded)) throw new Error('Invalid');
-                sessionRecords = decoded;
+                // 新形式（nickname + records）と旧形式（配列）の両方に対応
+                if (Array.isArray(decoded)) {
+                    sessionRecords = decoded;
+                    sessionNickname = null;
+                } else if (decoded.records && Array.isArray(decoded.records)) {
+                    sessionRecords = decoded.records;
+                    sessionNickname = decoded.nickname || null;
+                } else {
+                    throw new Error('Invalid');
+                }
                 document.getElementById('syncCodeError').style.display = 'none';
                 document.getElementById('syncCodeInput').value = '';
                 document.getElementById('staffLoginOverlay').classList.add('hidden');
@@ -928,21 +1111,27 @@
         document.getElementById('btnStaffLogout').addEventListener('click', () => {
             if (confirm('ログアウトしますか？')) {
                 sessionRecords = null;
+                sessionNickname = null;
                 localStorage.removeItem('appMode');
+                localStorage.removeItem('currentAccountId');
                 location.reload();
             }
         });
 
         // ================== 基本関数 ==================
-        // localStorageからデータを取得
         function loadRecords() {
-            const stored = localStorage.getItem('medicalRecords');
-            return stored ? JSON.parse(stored) : [];
+            const account = getCurrentAccount();
+            return account ? [...account.records] : [];
         }
 
-        // localStorageにデータを保存
         function saveRecords(records) {
-            localStorage.setItem('medicalRecords', JSON.stringify(records));
+            const accounts = loadAccounts();
+            const id = Number(localStorage.getItem('currentAccountId'));
+            const idx = accounts.findIndex(a => a.id === id);
+            if (idx >= 0) {
+                accounts[idx].records = records;
+                saveAccounts(accounts);
+            }
         }
 
         // 今日の日付をYYYY-MM-DD形式で取得
@@ -955,6 +1144,7 @@
         let selectedSymptoms = [];
         let medicineImageData = null;
         let sessionRecords = null; // 同期コードから読み込んだデータ（localStorageには保存しない）
+        let sessionNickname = null; // 同期コードから読み込んだニックネーム
 
         // ================== 「記録する」画面 ==================
         document.getElementById('recordDate').valueAsDate = new Date();
